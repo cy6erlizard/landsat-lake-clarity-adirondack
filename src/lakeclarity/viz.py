@@ -90,6 +90,7 @@ def use_style() -> None:
             "axes.linewidth": 0.8,
             "axes.spines.top": False,
             "axes.spines.right": False,
+            "axes.axisbelow": True,  # grid behind the marks, never through them
             "axes.grid": True,
             "axes.grid.axis": "y",
             "grid.color": GRID,
@@ -129,6 +130,12 @@ def shade_sensor_eras(ax, events: dict[int, str] | None = None, y: float = 0.98)
             fontsize=7.5,
             color=INK_MUTED,
         )
+
+
+def headroom(ax, factor: float = 1.30) -> None:
+    """Open space above the marks so annotations and legends never sit on data."""
+    lo, hi = ax.get_ylim()
+    ax.set_ylim(lo, lo + (hi - lo) * factor)
 
 
 def annotate(ax, text: str, loc: str = "upper left") -> None:

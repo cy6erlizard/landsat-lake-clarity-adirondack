@@ -2,6 +2,12 @@
 data/
 !tests/fixtures/
 
+# Figures are results. They are committed only once produced from the full
+# dataset in Colab, never from the 600-row test fixture, which would present
+# fixture noise as a finding.
+reports/figures/*.png
+reports/tables/*.csv
+
 # Working notes, not part of the deliverable
 PLAN.md
 *.docx
