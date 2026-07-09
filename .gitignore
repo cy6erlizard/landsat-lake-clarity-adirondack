@@ -1,0 +1,23 @@
+# Data never lives in git. It lives on Drive, fetched from EDI inside Colab.
+data/
+!tests/fixtures/
+
+# Working notes, not part of the deliverable
+PLAN.md
+*.docx
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+
+# Earth Engine / Google credentials
+*.json
+!notebooks/*.ipynb
+.ee_credentials
