@@ -27,18 +27,25 @@ a regional model that closes some of the gap.
 
 ## Status
 
-Under construction. Phase 0 complete.
+All seven phases implemented and unit-tested locally (90 tests). The notebooks
+run the pipeline end to end in Colab against the full dataset, which is the step
+that produces the real figures and the deliverable.
 
 | Phase | What | State |
 | --- | --- | --- |
-| 0 | Scaffolding, schema verification, test harness | done |
-| 1 | Land EDI data on Drive, audit it | in progress |
-| 2 | Select target lakes, measure the variance ceiling | |
-| 3 | Build training set, interrogate features | |
-| 4 | Train, attack the model, per-lake skill | |
-| 5 | Predict 1984-present, reconcile Collection 1 and 2 | |
-| 6 | Validate against Water Quality Portal field data | |
-| 7 | Ship deliverable CSV and report | |
+| 0 | Scaffolding, schema verification, test harness | code + tests |
+| 1 | Land EDI data on Drive, audit it | code + tests + notebook |
+| 2 | Select target lakes, measure the variance ceiling | code + tests + notebook |
+| 3 | Build training set, interrogate features | code + tests + notebook |
+| 4 | Train, attack the model, per-lake skill | code + tests + notebook |
+| 5 | Predict 1984-present, reconcile Collection 1 and 2 | code + tests + notebook |
+| 6 | Validate against Water Quality Portal field data | code + tests + notebook |
+| 7 | Ship deliverable CSV and report | code + tests + notebook |
+
+"code + tests" means the logic is written and covered by unit tests on synthetic
+and fixture data. "notebook" means the Colab driver that runs it on the full
+dataset exists. Running the notebooks in Colab is what populates
+`reports/figures/` and writes the deliverable.
 
 ## Three things the published data description gets wrong
 
