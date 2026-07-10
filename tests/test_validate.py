@@ -124,6 +124,32 @@ def test_wqp_knows_the_three_secchi_characteristic_names():
     assert len(wqp.SECCHI_CHARACTERISTICS) >= 3
 
 
+def test_characteristic_coverage_tolerates_a_rejected_name(monkeypatch):
+    """The portal 400s on a name outside its vocabulary; the diagnostic must not
+    crash, it must record the rejection and keep going."""
+    class FakeResp:
+        def __init__(self, status, text):
+            self.status_code = status
+            self.text = text
+
+    def fake_get(url, params=None, timeout=None):
+        name = params["characteristicName"]
+        if name == "Depth, Secchi disk depth":
+            return FakeResp(200, "h\n" + "\n".join(["row"] * 500))
+        if name == "Secchi Reservoir Transparency":
+            return FakeResp(400, "Bad Request")
+        return FakeResp(200, "h")  # valid but empty
+
+    monkeypatch.setattr(wqp.requests, "get", fake_get)
+    cov = wqp.characteristic_coverage()
+
+    canonical = cov[cov["characteristic"] == "Depth, Secchi disk depth"].iloc[0]
+    rejected = cov[cov["characteristic"] == "Secchi Reservoir Transparency"].iloc[0]
+    assert canonical["n_records"] == 500
+    assert rejected["n_records"] == 0
+    assert "rejected" in rejected["status"]
+
+
 def test_figures_render():
     viz.use_style()
     years = list(range(1990, 2020))

@@ -239,7 +239,14 @@ def characteristic_coverage(
             "dataProfile": "resultPhysChem",
         }
         resp = requests.get(WQP_RESULT_URL, params=params, timeout=timeout)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # The portal rejects a name it does not recognise with a 400 rather
+            # than returning an empty result. That is itself informative: the
+            # name is not in the WQP vocabulary and contributes nothing. Record
+            # it and move on rather than failing the whole diagnostic.
+            rows.append({"characteristic": name, "n_records": 0,
+                         "status": f"rejected ({resp.status_code})"})
+            continue
         n = sum(1 for _ in resp.text.splitlines()) - 1
-        rows.append({"characteristic": name, "n_records": max(n, 0)})
+        rows.append({"characteristic": name, "n_records": max(n, 0), "status": "ok"})
     return pd.DataFrame(rows)
