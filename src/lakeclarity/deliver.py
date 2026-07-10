@@ -70,7 +70,7 @@ def build_deliverable(predictions: pd.DataFrame) -> pd.DataFrame:
 
 
 def write_deliverable(predictions: pd.DataFrame, path: Path | None = None) -> Path:
-    path = path or config.PROCESSED_DIR / "secchi_predictions_adirondack.csv"
+    path = path or config.PROCESSED_DIR / "secchi_predictions.csv"
     build_deliverable(predictions).to_csv(path, index=False)
     return path
 

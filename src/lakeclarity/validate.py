@@ -93,12 +93,13 @@ def sensitivity_grid(
     on/off, month set) to the per-pass predictions produced under it. A result
     that holds only in one cell is noise, and this table makes that visible.
     """
+    obs_lake = observed[observed["lagoslakeid"] == lake_id] if "lagoslakeid" in observed.columns else observed
     rows = []
     for key, pred in predicted_by_config.items():
         window, pixel_floor, qa, months = key
         p = pred[pred["lagoslakeid"] == lake_id]
         p = p[p["month"].isin(months)].groupby("year")["secchi_predicted_m"].mean()
-        o = observed[observed["month"].isin(months)].groupby("year")[obs_col].mean()
+        o = obs_lake[obs_lake["month"].isin(months)].groupby("year")[obs_col].mean()
         joined = pd.concat([p.rename("pred"), o.rename("obs")], axis=1).dropna()
         if len(joined) < 4:
             r, p_val, n = np.nan, np.nan, len(joined)
@@ -121,7 +122,8 @@ def provenance_check(
     LIMNO ingests WQP, so they should. Disagreement means a units problem, a
     station-matching problem, or a Secchi-characteristic naming collision.
     """
-    w = wqp[["date", "secchi_m"]].dropna().sort_values("date")
+    wqp_lake = wqp[wqp["lagoslakeid"] == lake_id] if "lagoslakeid" in wqp.columns else wqp
+    w = wqp_lake[["date", "secchi_m"]].dropna().sort_values("date")
     lag = lagos_matchups[lagos_matchups["lagoslakeid"] == lake_id][["sample_date", "median_secchi"]].copy()
     lag["sample_date"] = pd.to_datetime(lag["sample_date"], errors="coerce")
     lag = lag.dropna().sort_values("sample_date")
@@ -146,7 +148,8 @@ def fig_validation_overlay(
     obs_col: str = "secchi_m",
 ):
     """F25. Observed, national, and regional July means, one line each."""
-    o = observed[observed["month"] == 7].groupby("year")[obs_col].mean()
+    obs_lake = observed[observed["lagoslakeid"] == lake_id] if "lagoslakeid" in observed.columns else observed
+    o = obs_lake[obs_lake["month"] == 7].groupby("year")[obs_col].mean()
     r = regional[(regional["lagoslakeid"] == lake_id) & (regional["month"] == 7)] \
         .groupby("year")["secchi_predicted_m"].mean()
     n = national[(national["lagoslakeid"] == lake_id) & (national["month"] == 7)] \

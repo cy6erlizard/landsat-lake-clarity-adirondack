@@ -60,8 +60,8 @@ def load_lakes() -> pd.DataFrame:
     return lakes
 
 
-def adirondack_lakes(lakes: pd.DataFrame | None = None, use_bbox_fallback: bool = True) -> pd.DataFrame:
-    """New York lakes inside the Adirondack Park counties.
+def region_lakes(lakes: pd.DataFrame | None = None, use_bbox_fallback: bool = True) -> pd.DataFrame:
+    """Lakes inside the study region (config.REGION_STATE and its counties).
 
     The county list is the primary filter because it is categorical and exact.
     The bounding box is a fallback for rows with a missing county, and it is
@@ -69,25 +69,30 @@ def adirondack_lakes(lakes: pd.DataFrame | None = None, use_bbox_fallback: bool 
     for lacking a county string.
     """
     lakes = load_lakes() if lakes is None else lakes
-    ny = lakes[lakes["lake_centroidstate"] == config.REGION_STATE].copy()
+    state = lakes[lakes["lake_centroidstate"] == config.REGION_STATE].copy()
 
-    by_county = ny["lake_county"].isin(config.ADIRONDACK_COUNTIES)
+    by_county = state["lake_county"].isin(config.REGION_COUNTIES)
 
     if use_bbox_fallback:
-        b = config.ADIRONDACK_BBOX
+        b = config.REGION_BBOX
         in_box = (
-            ny["lake_lat_decdeg"].between(b["lat_min"], b["lat_max"])
-            & ny["lake_lon_decdeg"].between(b["lon_min"], b["lon_max"])
+            state["lake_lat_decdeg"].between(b["lat_min"], b["lat_max"])
+            & state["lake_lon_decdeg"].between(b["lon_min"], b["lon_max"])
         )
         keep = by_county & in_box
-        # A missing county inside the box is kept; a named non-park county is not.
-        keep |= ny["lake_county"].isna() & in_box
+        # A missing county inside the box is kept; a named out-of-region county is not.
+        keep |= state["lake_county"].isna() & in_box
     else:
         keep = by_county
 
-    out = ny[keep].copy()
-    log.info("%s NY lakes, %s in the Adirondack region", f"{len(ny):,}", f"{len(out):,}")
+    out = state[keep].copy()
+    log.info("%s %s lakes, %s in %s", f"{len(state):,}", config.REGION_STATE,
+             f"{len(out):,}", config.REGION_NAME)
     return out
+
+
+# Backwards-compatible alias; the pipeline now calls region_lakes.
+adirondack_lakes = region_lakes
 
 
 def attach_lake_metadata(matchups: pd.DataFrame, lakes: pd.DataFrame | None = None) -> pd.DataFrame:

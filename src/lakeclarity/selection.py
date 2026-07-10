@@ -48,54 +48,79 @@ class TargetLakes:
             lines.append(
                 f"{role:>5}: {row['lake_name']} (id {int(row['lagoslakeid'])}) "
                 f"{row['lake_waterarea_ha']:.0f} ha, "
-                f"{int(row['n_july_years'])} July-years, "
-                f"{int(row['n_matchups'])} matchups, "
-                f"Secchi {row['secchi_mean']:.2f} +/- {row['secchi_sd']:.2f} m"
+                f"{int(row['field_july_years'])} field July-years, "
+                f"{int(row['n_matchups'])} training matchups, "
+                f"field Secchi mean {row['field_secchi_mean']:.2f} m"
             )
         return "\n".join(lines)
 
 
-def candidate_table(region_matchups: pd.DataFrame, lakes: pd.DataFrame) -> pd.DataFrame:
-    """Per-lake coverage and clarity, joined to morphometry, ranked by July-years."""
+def candidate_table(
+    region_matchups: pd.DataFrame,
+    lakes: pd.DataFrame,
+    field_coverage: pd.DataFrame,
+) -> pd.DataFrame:
+    """Per-lake table joining training supply, field coverage, and morphometry.
+
+    ``field_coverage`` (from ``wqp.lake_field_coverage``) supplies the column the
+    gate actually selects on, ``field_july_years``, i.e. distinct years with a
+    July field Secchi reading. The matchup-derived columns (``n_matchups``,
+    ``n_july_years``) describe TRAINING supply and are kept for context, not for
+    selection: they count coincident satellite/in-situ pairs and badly undercount
+    the achievable validation sample.
+
+    Lakes are ranked by field July-years, and a lake with field coverage but no
+    matchups is still a valid target because target lakes are held out of training
+    and predicted from the reflectance record, not from matchups.
+    """
     summary = eda.per_lake_summary(region_matchups)
     meta = lakes.set_index("lagoslakeid")[
         ["lake_name", "lake_county", "lake_lat_decdeg", "lake_lon_decdeg",
          "lake_waterarea_ha", "lake_meanwidth_m"]
     ]
-    out = summary.join(meta, how="left").reset_index()
-    return out.sort_values(["n_july_years", "n_matchups"], ascending=False)
+    out = (
+        field_coverage
+        .join(summary, how="left")
+        .join(meta, how="left")
+        .reset_index()
+    )
+    out["n_matchups"] = out["n_matchups"].fillna(0).astype(int)
+    return out.sort_values(["field_july_years", "n_matchups"], ascending=False)
 
 
 def select_target_lakes(
     candidates: pd.DataFrame,
-    min_july_years: int = config.MIN_JULY_MATCHUPS,
+    min_field_july_years: int = config.MIN_FIELD_JULY_YEARS,
     large_min_ha: float = config.LARGE_LAKE_MIN_HA,
     small_ha_range: tuple[float, float] = config.SMALL_LAKE_HA_RANGE,
 ) -> TargetLakes:
-    """One large lake and one small one, both with enough July-years to validate.
+    """One large lake and one small one, both with enough FIELD July-years.
 
     Mirrors the client's Squam (roughly 2,600 ha) and Little Squam (roughly 160
-    ha). The small lake is the hard case: shoreline erosion removes a
-    disproportionate share of its pixels, so its scene medians are noisier and
-    more of its observations fall below the pixel-count floor.
+    ha). Selection is on ``field_july_years`` because that is what limits the
+    July-annual-mean validation. The small lake is the hard case: shoreline
+    erosion removes a disproportionate share of its pixels, so its scene medians
+    are noisier and more of its observations fall below the pixel-count floor.
     """
-    eligible = candidates[candidates["n_july_years"] >= min_july_years]
+    eligible = candidates[candidates["field_july_years"] >= min_field_july_years]
 
     large = eligible[eligible["lake_waterarea_ha"] >= large_min_ha]
     small = eligible[eligible["lake_waterarea_ha"].between(*small_ha_range)]
 
     if large.empty:
         raise NoEligibleLakeError(
-            f"no lake >= {large_min_ha} ha has {min_july_years}+ July-years. "
-            f"Best available: {candidates['n_july_years'].max()} July-years."
+            f"no lake >= {large_min_ha} ha has {min_field_july_years}+ field "
+            f"July-years. Best available: "
+            f"{int(candidates['field_july_years'].max())} field July-years."
         )
     if small.empty:
         best = candidates[candidates["lake_waterarea_ha"].between(*small_ha_range)]
-        best_n = int(best["n_july_years"].max()) if not best.empty else 0
+        best_n = int(best["field_july_years"].max()) if not best.empty else 0
         raise NoEligibleLakeError(
-            f"no lake in {small_ha_range} ha has {min_july_years}+ July-years. "
-            f"Best small lake has {best_n}. Either relax the threshold, widen the "
-            f"region, or accept that the small-lake case cannot be validated here."
+            f"no lake in {small_ha_range} ha has {min_field_july_years}+ field "
+            f"July-years. Best small lake has {best_n}. Either relax the "
+            f"threshold, widen the region, or accept that the small-lake case "
+            f"cannot be validated here."
         )
 
     picked = TargetLakes(large=large.iloc[0], small=small.iloc[0])
@@ -132,18 +157,18 @@ def ceiling_report(train: pd.DataFrame) -> dict[str, float]:
 # Figures
 # --------------------------------------------------------------------------
 def fig_region_map(candidates: pd.DataFrame, targets: TargetLakes | None = None):
-    """F6. Where the candidate lakes are, how much data each has, how clear it is."""
+    """F6. Where the candidate lakes are, how much field data each has, how clear it is."""
     df = candidates.dropna(subset=["lake_lat_decdeg", "lake_lon_decdeg"])
 
     fig, ax = plt.subplots(figsize=(7.2, 7))
-    sizes = 8 + 4 * np.sqrt(df["n_matchups"])
+    sizes = 8 + 5 * np.sqrt(df["field_july_years"].fillna(0))
     sc = ax.scatter(
         df["lake_lon_decdeg"], df["lake_lat_decdeg"],
-        s=sizes, c=df["secchi_mean"], cmap=viz.SEQUENTIAL,
+        s=sizes, c=df["field_secchi_mean"], cmap=viz.SEQUENTIAL,
         edgecolor=viz.SURFACE, linewidth=0.6, zorder=3,
     )
     cb = fig.colorbar(sc, ax=ax, shrink=0.7, pad=0.02)
-    cb.set_label("mean Secchi depth (m)")
+    cb.set_label("mean field Secchi depth (m)")
     cb.outline.set_visible(False)
 
     if targets is not None:
@@ -158,10 +183,10 @@ def fig_region_map(candidates: pd.DataFrame, targets: TargetLakes | None = None)
 
     ax.set_xlabel("longitude")
     ax.set_ylabel("latitude")
-    ax.set_title("F6  Adirondack candidate lakes")
+    ax.set_title(f"F6  {config.REGION_NAME} candidate lakes")
     ax.set_aspect(1 / np.cos(np.deg2rad(df["lake_lat_decdeg"].mean())))
     ax.grid(axis="both")
-    viz.annotate(ax, "marker size = Secchi matchups", loc="lower left")
+    viz.annotate(ax, "marker size = field July-years", loc="lower left")
     return fig
 
 
@@ -184,6 +209,8 @@ def fig_area_vs_pixels(candidates: pd.DataFrame, targets: TargetLakes | None = N
 
     if targets is not None:
         for role, row in (("large", targets.large), ("small", targets.small)):
+            if pd.isna(row.get("pixelcount_median")):
+                continue  # a target selected on field coverage may lack matchups
             ax.scatter(row["lake_waterarea_ha"], row["pixelcount_median"],
                        s=150, facecolor="none", edgecolor=viz.STATUS["critical"], linewidth=2.0, zorder=4)
             ax.annotate(row["lake_name"], (row["lake_waterarea_ha"], row["pixelcount_median"]),
@@ -255,8 +282,19 @@ def fig_variance_decomposition(train: pd.DataFrame):
     return fig
 
 
-def fig_candidate_timeseries(region_matchups: pd.DataFrame, candidates: pd.DataFrame, n: int = 8):
-    """F9. Small multiples. What a per-lake Secchi record actually looks like."""
+def fig_candidate_timeseries(
+    field: pd.DataFrame,
+    site_to_lake: pd.DataFrame,
+    candidates: pd.DataFrame,
+    n: int = 8,
+):
+    """F9. Small multiples of the per-lake FIELD Secchi record.
+
+    Plots the Water Quality Portal field readings, not the matchups, because the
+    field record is what the validation uses and is far richer than the coincident
+    matchups. July readings are highlighted since the headline metric is July-only.
+    """
+    joined = field.merge(site_to_lake[["site_id", "lagoslakeid"]], on="site_id", how="inner")
     top = candidates.head(n)
     ncol = 4
     nrow = int(np.ceil(len(top) / ncol))
@@ -265,19 +303,19 @@ def fig_candidate_timeseries(region_matchups: pd.DataFrame, candidates: pd.DataF
     axes = np.atleast_1d(axes).ravel()
 
     for ax, (_, row) in zip(axes, top.iterrows()):
-        g = region_matchups[region_matchups["lagoslakeid"] == row["lagoslakeid"]]
+        g = joined[joined["lagoslakeid"] == row["lagoslakeid"]]
         july = g[g["month"] == 7]
-        ax.scatter(g["year"], g[config.TARGET], s=10, color=viz.INK_MUTED,
+        ax.scatter(g["year"], g["secchi_m"], s=10, color=viz.INK_MUTED,
                    alpha=0.5, label="all months")
-        ax.scatter(july["year"], july[config.TARGET], s=18, color=viz.CATEGORICAL[0],
+        ax.scatter(july["year"], july["secchi_m"], s=18, color=viz.CATEGORICAL[0],
                    label="July")
-        ax.set_title(f"{row['lake_name']}\n{int(row['n_july_years'])} July-years", fontsize=9)
+        ax.set_title(f"{row['lake_name']}\n{int(row['field_july_years'])} July-years", fontsize=9)
 
     for ax in axes[len(top):]:
         ax.set_visible(False)
     axes[0].legend(loc="upper right", fontsize=7)
     fig.supxlabel("year")
-    fig.supylabel("Secchi depth (m)")
-    fig.suptitle("F9  Per-lake Secchi records", x=0.01, ha="left", fontweight="semibold")
+    fig.supylabel("field Secchi depth (m)")
+    fig.suptitle("F9  Per-lake field Secchi records", x=0.01, ha="left", fontweight="semibold")
     fig.tight_layout()
     return fig

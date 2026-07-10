@@ -1,25 +1,30 @@
-# Regional Landsat water clarity model, Adirondack lakes
+# Regional Landsat water clarity model, Northern Lower Michigan lakes
 
 A regionally-calibrated random forest that predicts Secchi disk depth (water
-clarity) from Landsat surface reflectance for Adirondack lakes, 1984 to present,
-and a validation that measures it the way a lake manager would actually use it:
-**can it track one lake through time?**
+clarity) from Landsat surface reflectance for Northern Lower Michigan lakes, 1984
+to present, and a validation that measures it the way a lake manager would
+actually use it: **can it track one lake through time?**
+
+The region is Northern Lower Michigan (clear, deep, glacial kettle lakes such as
+Glen Lake and Higgins Lake) because it pairs the same CDOM-influenced optical
+regime as the New Hampshire reference lakes with decades of volunteer field
+Secchi from the Michigan Cooperative Lakes Monitoring Program (since 1974).
 
 The pipeline runs in Google Colab, one notebook per phase. Each notebook has an
 Open in Colab badge; run them in order 01 through 07.
 
 | Notebook | Phase |
 | --- | --- |
-| [01 audit](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity-adirondack/blob/main/notebooks/01_audit.ipynb) | Land EDI data on Drive, audit it |
-| [02 select lakes](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity-adirondack/blob/main/notebooks/02_select_lakes.ipynb) | Choose target lakes, measure the variance ceiling |
-| [03 features](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity-adirondack/blob/main/notebooks/03_features.ipynb) | Build training set, interrogate features |
-| [04 train](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity-adirondack/blob/main/notebooks/04_train.ipynb) | Train the regional model, attack it |
-| [05 predict](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity-adirondack/blob/main/notebooks/05_predict.ipynb) | Predict 1984-present, reconcile Collection 1 and 2 |
-| [06 validate](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity-adirondack/blob/main/notebooks/06_validate.ipynb) | Validate against Water Quality Portal field data |
-| [07 deliver](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity-adirondack/blob/main/notebooks/07_deliver.ipynb) | Assemble the deliverable CSV and report |
+| [01 audit](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/01_audit.ipynb) | Land EDI data on Drive, audit it |
+| [02 select lakes](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/02_select_lakes.ipynb) | Choose target lakes, measure the variance ceiling |
+| [03 features](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/03_features.ipynb) | Build training set, interrogate features |
+| [04 train](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/04_train.ipynb) | Train the regional model, attack it |
+| [05 predict](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/05_predict.ipynb) | Predict 1984-present, reconcile Collection 1 and 2 |
+| [06 validate](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/06_validate.ipynb) | Validate against Water Quality Portal field data |
+| [07 deliver](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/07_deliver.ipynb) | Assemble the deliverable CSV and report |
 
 This replicates the method of Piper, Glines & Rose (2024, *Ecology*), who built a
-Wisconsin-specific model, and applies it to New York.
+Wisconsin-specific model, and applies it to Northern Lower Michigan.
 
 ## The problem this exists to solve
 
@@ -40,9 +45,12 @@ a regional model that closes some of the gap.
 
 ## Status
 
-All seven phases implemented and unit-tested locally (90 tests). The notebooks
+All seven phases implemented and unit-tested locally (94 tests). The notebooks
 run the pipeline end to end in Colab against the full dataset, which is the step
-that produces the real figures and the deliverable.
+that produces the real figures and the deliverable. Phase 1 (audit) has been run
+on the full data: 723,206 matchups, 666,060 with a Secchi reading over 12,735
+lakes. Phase 2 selects the target lakes by field July-year coverage from the
+Water Quality Portal, not by coincident matchups.
 
 | Phase | What | State |
 | --- | --- | --- |

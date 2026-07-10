@@ -160,19 +160,39 @@ NEGATIVE_REFLECTANCE_FLOOR = 0.0
 # --------------------------------------------------------------------------
 # Region and targets
 # --------------------------------------------------------------------------
-REGION_STATE = "NY"
-# Adirondack Park spans these counties. Used to narrow `lake_information`.
-ADIRONDACK_COUNTIES = [
-    "Clinton", "Essex", "Franklin", "Fulton", "Hamilton", "Herkimer",
-    "Lewis", "Oneida", "Saratoga", "St. Lawrence", "Warren", "Washington",
+# Northern Lower Michigan: clear, deep, glacial kettle and moraine lakes, the
+# same CDOM-influenced optical regime as the New Hampshire target lakes, with
+# decades of field Secchi from the Michigan Cooperative Lakes Monitoring Program
+# (CLMP, running since 1974). Chosen over the Adirondacks because interior
+# Adirondack lakes have thin field records (~10 July-years) while Northern Lower
+# Michigan has dozens of lakes with 20+ July-years (Glen Lake 39, Higgins 36).
+REGION_STATE = "MI"
+REGION_NAME = "Northern Lower Michigan"
+REGION_COUNTIES = [
+    "Leelanau", "Grand Traverse", "Benzie", "Antrim", "Kalkaska", "Roscommon",
+    "Crawford", "Otsego", "Missaukee", "Wexford", "Charlevoix", "Emmet",
+    "Cheboygan", "Montmorency", "Oscoda", "Ogemaw",
 ]
-# Coarse bounding box fallback if the county join is unusable.
-ADIRONDACK_BBOX = dict(lat_min=43.0, lat_max=44.9, lon_min=-75.4, lon_max=-73.2)
+# Coarse bounding box fallback if the county join is unusable, and the box used
+# for the regional Water Quality Portal field pull.
+REGION_BBOX = dict(lat_min=44.0, lat_max=45.9, lon_min=-86.3, lon_max=-83.9)
 
 # Target-lake selection thresholds, per the plan's Phase 2 gate.
-MIN_JULY_MATCHUPS = 25
+# The gate counts FIELD July-years (distinct years with a July Secchi reading in
+# the Water Quality Portal), NOT coincident satellite/in-situ matchups. The
+# client's validation correlates the model's July prediction (from any July pass)
+# against the field July reading (from any July measurement); coincidence within
+# the matchup window is a training requirement, not a validation one, so matchup
+# July-years badly undercount the achievable validation sample.
+MIN_FIELD_JULY_YEARS = 15
 LARGE_LAKE_MIN_HA = 800.0
-SMALL_LAKE_HA_RANGE = (80.0, 400.0)
+SMALL_LAKE_HA_RANGE = (60.0, 500.0)
+# A Water Quality Portal site is assigned to the NEAREST LOCUS lake centroid
+# within this distance; farther sites are left unmapped rather than misattributed.
+# Nearest-lake assignment disambiguates adjacent lakes on its own, so the cap only
+# needs to be wide enough to catch mid-lake and far-shore sites on large lakes,
+# whose centroid can sit a couple of kilometres from a monitoring station.
+SITE_TO_LAKE_MAX_KM = 2.5
 
 # --------------------------------------------------------------------------
 # Sensor eras. Every long time series gets these drawn on it.
