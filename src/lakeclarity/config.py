@@ -166,6 +166,12 @@ NEGATIVE_REFLECTANCE_FLOOR = 0.0
 # (CLMP, running since 1974). Chosen over the Adirondacks because interior
 # Adirondack lakes have thin field records (~10 July-years) while Northern Lower
 # Michigan has dozens of lakes with 20+ July-years (Glen Lake 39, Higgins 36).
+# Training uses every suitable lake in the state, mirroring Piper, Glines & Rose,
+# who trained on all Wisconsin lakes in AquaSat rather than only their 127 study
+# lakes. Target lakes are drawn from the narrower county set below.
+TRAIN_STATE = "MI"
+TRAIN_REGION_NAME = "Michigan"
+
 REGION_STATE = "MI"
 REGION_NAME = "Northern Lower Michigan"
 REGION_COUNTIES = [
@@ -187,12 +193,14 @@ REGION_BBOX = dict(lat_min=44.0, lat_max=45.9, lon_min=-86.3, lon_max=-83.9)
 MIN_FIELD_JULY_YEARS = 15
 LARGE_LAKE_MIN_HA = 800.0
 SMALL_LAKE_HA_RANGE = (60.0, 500.0)
-# A Water Quality Portal site is assigned to the NEAREST LOCUS lake centroid
-# within this distance; farther sites are left unmapped rather than misattributed.
-# Nearest-lake assignment disambiguates adjacent lakes on its own, so the cap only
-# needs to be wide enough to catch mid-lake and far-shore sites on large lakes,
-# whose centroid can sit a couple of kilometres from a monitoring station.
-SITE_TO_LAKE_MAX_KM = 2.5
+# A Water Quality Portal site is assigned to the nearest plausible lake centroid.
+# "Plausible" means the lake is large enough to be modelled at all and the station
+# lies inside the lake's own footprint. Without the footprint test, a shoreline
+# station on a large lake gets assigned to a tiny neighbouring pond whose centroid
+# happens to be nearer, handing a 1 ha pond a 30-year monitoring record.
+SITE_TO_LAKE_MAX_KM = 3.5      # hard cap, whatever the lake's size
+MIN_MAPPABLE_LAKE_HA = 4.0     # LAGOS-US LANDSAT covers lakes over 4 ha only
+SITE_SHORE_BUFFER_KM = 0.3     # tolerance beyond the equivalent-circle radius
 
 # --------------------------------------------------------------------------
 # Sensor eras. Every long time series gets these drawn on it.

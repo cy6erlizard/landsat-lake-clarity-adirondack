@@ -60,8 +60,22 @@ def load_lakes() -> pd.DataFrame:
     return lakes
 
 
+def train_lakes(lakes: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Every lake in the training state.
+
+    Piper, Glines & Rose trained on all Wisconsin lakes in AquaSat, not only their
+    127 study lakes, to maximise training data. The equivalent here is every
+    Michigan lake. Target lakes come from the narrower county region and are held
+    out of training entirely.
+    """
+    lakes = load_lakes() if lakes is None else lakes
+    out = lakes[lakes["lake_centroidstate"] == config.TRAIN_STATE].copy()
+    log.info("%s lakes in the training state (%s)", f"{len(out):,}", config.TRAIN_STATE)
+    return out
+
+
 def region_lakes(lakes: pd.DataFrame | None = None, use_bbox_fallback: bool = True) -> pd.DataFrame:
-    """Lakes inside the study region (config.REGION_STATE and its counties).
+    """Lakes inside the target region (config.REGION_STATE and its counties).
 
     The county list is the primary filter because it is categorical and exact.
     The bounding box is a fallback for rows with a missing county, and it is

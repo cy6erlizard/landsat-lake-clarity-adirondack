@@ -168,34 +168,66 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return 2 * r * np.arcsin(np.sqrt(a))
 
 
+def lake_radius_km(area_ha) -> float:
+    """Radius of a circle with the lake's surface area, in kilometres."""
+    import numpy as np
+
+    return np.sqrt(np.asarray(area_ha, dtype=float) * 1e4 / np.pi) / 1000.0
+
+
 def map_sites_to_lakes(
     stations: pd.DataFrame,
     lakes: pd.DataFrame,
     max_km: float = config.SITE_TO_LAKE_MAX_KM,
+    min_area_ha: float = config.MIN_MAPPABLE_LAKE_HA,
+    shore_buffer_km: float = config.SITE_SHORE_BUFFER_KM,
 ) -> pd.DataFrame:
-    """Assign each station to the nearest LOCUS lake centroid within ``max_km``.
+    """Assign each station to the nearest plausible lake, by centroid distance.
 
-    A centroid is a coarse anchor for a large lake, so ``max_km`` is generous.
-    Stations with no lake inside the radius are left unmapped rather than
-    misattributed to a distant lake.
+    Nearest-centroid alone is not enough. A monitoring station on the shore of a
+    large lake can sit closer to the centroid of a tiny neighbouring pond than to
+    the centroid of the lake it actually samples, so naive nearest-centroid
+    assigns decades of big-lake records to 1-hectare ponds.
+
+    Two guards, both physical:
+
+    * A lake must be at least ``min_area_ha``. LAGOS-US LANDSAT only covers lakes
+      over 4 ha, so a smaller lake can never be predicted anyway.
+    * A station must lie within the lake's own footprint: its distance to the
+      centroid must not exceed the lake's equivalent-circle radius plus
+      ``shore_buffer_km``. A 2,547 ha lake has a radius of 2.8 km and can host a
+      station 2.8 km from its centre; a 6 ha lake has a radius of 140 m and
+      cannot.
+
+    Among the lakes that pass both guards, the nearest centroid wins, which is
+    what disambiguates genuinely adjacent lakes. Stations with no plausible lake
+    are left unmapped rather than misattributed.
     """
     import numpy as np
 
-    lk = lakes.dropna(subset=["lake_lat_decdeg", "lake_lon_decdeg"]).reset_index(drop=True)
+    lk = lakes.dropna(subset=["lake_lat_decdeg", "lake_lon_decdeg", "lake_waterarea_ha"])
+    lk = lk[lk["lake_waterarea_ha"] >= min_area_ha].reset_index(drop=True)
+    if lk.empty:
+        return pd.DataFrame(columns=["site_id", "lagoslakeid", "lake_name", "dist_km"])
+
     lat = lk["lake_lat_decdeg"].to_numpy()
     lon = lk["lake_lon_decdeg"].to_numpy()
+    reach = np.minimum(lake_radius_km(lk["lake_waterarea_ha"].to_numpy()) + shore_buffer_km, max_km)
 
     rows = []
     for _, s in stations.iterrows():
         d = _haversine_km(s["site_lat"], s["site_lon"], lat, lon)
-        j = int(np.argmin(d))
-        if d[j] <= max_km:
-            rows.append({
-                "site_id": s["site_id"],
-                "lagoslakeid": int(lk.iloc[j]["lagoslakeid"]),
-                "lake_name": lk.iloc[j].get("lake_name"),
-                "dist_km": float(d[j]),
-            })
+        plausible = np.where(d <= reach)[0]
+        if plausible.size == 0:
+            continue
+        j = int(plausible[np.argmin(d[plausible])])
+        rows.append({
+            "site_id": s["site_id"],
+            "lagoslakeid": int(lk.iloc[j]["lagoslakeid"]),
+            "lake_name": lk.iloc[j].get("lake_name"),
+            "dist_km": float(d[j]),
+            "lake_waterarea_ha": float(lk.iloc[j]["lake_waterarea_ha"]),
+        })
     return pd.DataFrame(rows)
 
 

@@ -78,10 +78,13 @@ def candidate_table(
         ["lake_name", "lake_county", "lake_lat_decdeg", "lake_lon_decdeg",
          "lake_waterarea_ha", "lake_meanwidth_m"]
     ]
+    # Inner join on the region's lakes: a lake with field coverage but no entry in
+    # `lakes` sits outside the target region and can never be a target, so it does
+    # not belong in the candidate table at all.
     out = (
         field_coverage
+        .join(meta, how="inner")
         .join(summary, how="left")
-        .join(meta, how="left")
         .reset_index()
     )
     out["n_matchups"] = out["n_matchups"].fillna(0).astype(int)
@@ -226,42 +229,55 @@ def fig_area_vs_pixels(candidates: pd.DataFrame, targets: TargetLakes | None = N
     return fig
 
 
-def fig_variance_decomposition(train: pd.DataFrame):
+def fig_variance_decomposition(
+    train: pd.DataFrame,
+    national: pd.DataFrame | None = None,
+    train_label: str | None = None,
+):
     """F8. The figure that explains the client's whole problem.
 
-    Left: the variance split. Right: what that split means for a model. A model
-    that nails the between-lake structure and nothing else sits at the top of the
-    pooled-R2 scale and at zero on the per-lake scale.
+    A regional ICC means nothing on its own. What matters is the contrast: the
+    national training distribution is dominated by between-lake variance, which a
+    model can capture while having no within-lake skill anywhere. Inside one
+    optically homogeneous region the lakes resemble each other, between-lake
+    variance collapses, and what remains is the temporal signal a regional model
+    can actually learn.
+
+    Pass ``national`` to draw both bars. Left panel is the split, right panel is
+    how far a single lake really moves.
     """
+    train_label = train_label or config.TRAIN_REGION_NAME
     vd = eda.variance_decomposition(train)
     per_lake = train.groupby("lagoslakeid")[config.TARGET].std().dropna()
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.6),
-                                   gridspec_kw={"width_ratios": [1, 1.25]})
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.8),
+                                   gridspec_kw={"width_ratios": [1.05, 1.25]})
 
-    # Left: stacked variance
-    ax1.bar([0], [vd.var_between], color=viz.CATEGORICAL[0], width=0.5,
-            label="between lakes")
-    ax1.bar([0], [vd.var_within], bottom=[vd.var_between], color=viz.CATEGORICAL[2],
-            width=0.5, label="within a lake, over time")
-    ax1.set_xticks([])
-    ax1.set_xlim(-0.62, 0.62)
-    ax1.set_ylabel("variance in log10 Secchi depth")
+    panels = [(train_label, vd)]
+    if national is not None:
+        panels.insert(0, ("national\n(all US)", eda.variance_decomposition(national)))
+
+    x = np.arange(len(panels))
+    for xi, (_, v) in zip(x, panels):
+        total = v.var_between + v.var_within
+        ax1.bar([xi], [100 * v.var_between / total], color=viz.CATEGORICAL[0], width=0.55)
+        ax1.bar([xi], [100 * v.var_within / total], bottom=[100 * v.var_between / total],
+                color=viz.CATEGORICAL[2], width=0.55)
+        ax1.annotate(f"ICC\n{v.icc:.2f}", xy=(xi, 100 * v.var_between / total / 2),
+                     ha="center", va="center", fontsize=10, color=viz.SURFACE,
+                     fontweight="semibold", linespacing=1.4)
+
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([p[0] for p in panels], fontsize=9)
+    ax1.set_ylabel("share of variance in log10 Secchi (%)")
+    ax1.set_ylim(0, 100)
+    ax1.set_yticks(range(0, 101, 20))
     ax1.set_title("F8  Where the variance lives")
-    viz.headroom(ax1, 1.34)
-    ax1.legend(loc="upper center")
-    ax1.annotate(
-        f"ICC = {vd.icc:.3f}\n{100*vd.icc:.0f}% of variance\nis between lakes",
-        xy=(0, vd.var_between / 2), ha="center", va="center",
-        fontsize=9.5, color=viz.SURFACE, fontweight="semibold", linespacing=1.5,
-    )
-    ax1.annotate(
-        f"only {100*(1-vd.icc):.0f}% is a lake\nchanging over time",
-        xy=(0.26, vd.var_between + vd.var_within / 2),
-        xytext=(0.56, vd.var_between + vd.var_within * 1.9),
-        fontsize=9, color=viz.INK_SECONDARY, va="center", ha="right",
-        arrowprops=dict(arrowstyle="-", color=viz.INK_MUTED, linewidth=0.9),
-    )
+    handles = [plt.Rectangle((0, 0), 1, 1, color=viz.CATEGORICAL[0]),
+               plt.Rectangle((0, 0), 1, 1, color=viz.CATEGORICAL[2])]
+    # Below the axis: a percentage scale must not be padded past 100.
+    ax1.legend(handles, ["between lakes", "within a lake, over time"],
+               loc="upper center", bbox_to_anchor=(0.5, -0.14), ncols=2)
 
     # Right: how far a single lake actually moves
     pooled_sd = train[config.TARGET].std()
@@ -270,7 +286,7 @@ def fig_variance_decomposition(train: pd.DataFrame):
                 label="all lakes and years pooled")
     ax2.set_xlabel("standard deviation of Secchi depth (m)")
     ax2.set_ylabel("lakes")
-    ax2.set_title("A single lake barely moves")
+    ax2.set_title(f"How far a single {train_label} lake moves")
     viz.headroom(ax2, 1.46)
     ax2.legend(loc="upper right", title="Secchi variability of...", alignment="left")
     viz.annotate(

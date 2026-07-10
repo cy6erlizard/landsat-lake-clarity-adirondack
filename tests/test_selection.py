@@ -144,6 +144,29 @@ def test_ceiling_report_returns_a_high_icc_for_lakes_that_differ_a_lot():
     assert rep["pct_variance_between_lakes"] + rep["pct_variance_within_lakes"] == pytest.approx(100.0)
 
 
+def test_a_homogeneous_region_has_a_much_lower_icc_than_a_heterogeneous_one():
+    """Why the regional ICC alone proves nothing, and the contrast is the argument.
+
+    Nationally, lakes span turbid reservoirs to clear kettle lakes, so between-lake
+    variance dominates and a pooled R-squared mostly measures lake identity. Inside
+    one optically homogeneous region the lakes resemble each other, between-lake
+    variance collapses, and what remains is temporal signal a model can learn.
+    """
+    heterogeneous = _region_frame(n_lakes=60, n_obs=25, seed=0)          # between sd 0.35
+    homogeneous = _region_frame(n_lakes=60, n_obs=25, seed=1)
+    # squeeze the lake means together, leaving the within-lake spread intact
+    lake_mean = homogeneous.groupby("lagoslakeid")[config.LOG_TARGET].transform("mean")
+    grand = homogeneous[config.LOG_TARGET].mean()
+    homogeneous[config.LOG_TARGET] = homogeneous[config.LOG_TARGET] - 0.75 * (lake_mean - grand)
+    homogeneous[config.TARGET] = 10 ** homogeneous[config.LOG_TARGET]
+
+    icc_het = selection.ceiling_report(heterogeneous)["icc"]
+    icc_hom = selection.ceiling_report(homogeneous)["icc"]
+    assert icc_het > 0.7
+    assert icc_hom < 0.5
+    assert icc_het - icc_hom > 0.25
+
+
 def _field_and_map(candidates: pd.DataFrame):
     """A field record and site->lake map covering the candidate lakes."""
     rng = np.random.default_rng(0)
@@ -169,10 +192,13 @@ def test_figures_render():
     targets = selection.TargetLakes(large=cands.iloc[7], small=cands.iloc[1])
     field, site_map = _field_and_map(cands)
 
+    national = _region_frame(n_lakes=50, n_obs=20, seed=9)
+
     for fig in (
         selection.fig_region_map(cands, targets),
         selection.fig_area_vs_pixels(cands, targets),
-        selection.fig_variance_decomposition(train),
+        selection.fig_variance_decomposition(train),                      # regional only
+        selection.fig_variance_decomposition(train, national=national),   # both bars
         selection.fig_candidate_timeseries(field, site_map, cands),
     ):
         assert fig.axes
@@ -191,11 +217,76 @@ def test_haversine_and_site_mapping_assign_to_the_nearest_lake():
         "lake_name": ["Glen", "Torch"],
         "lake_lat_decdeg": [44.801, 44.901],
         "lake_lon_decdeg": [-85.901, -85.201],
+        "lake_waterarea_ha": [2546.0, 7578.0],
     })
-    m = wqp.map_sites_to_lakes(stations, lakes, max_km=1.5)
-    assert set(m["site_id"]) == {"A", "B"}  # FAR is beyond the radius, unmapped
+    m = wqp.map_sites_to_lakes(stations, lakes)
+    assert set(m["site_id"]) == {"A", "B"}  # FAR is beyond every lake's footprint
     assert m.set_index("site_id").loc["A", "lagoslakeid"] == 1
     assert m.set_index("site_id").loc["B", "lagoslakeid"] == 2
+
+
+def test_lake_radius_scales_with_area():
+    assert wqp.lake_radius_km(2546.6) == pytest.approx(2.847, abs=0.01)
+    assert wqp.lake_radius_km(1.08) == pytest.approx(0.059, abs=0.005)
+
+
+def test_a_shoreline_station_is_not_captured_by_a_nearer_tiny_pond():
+    """The bug the footprint guard exists to prevent.
+
+    A station on the shore of a 2,547 ha lake sits 2.8 km from that lake's
+    centroid but only 0.6 km from a 1 ha pond's centroid. Naive nearest-centroid
+    hands the pond a 30-year monitoring record. The pond's own footprint is 360 m
+    across, so the station cannot be on it.
+    """
+    stations = pd.DataFrame({
+        "site_id": ["BIG_LAKE_SHORE"], "site_name": ["shore"],
+        "site_lat": [44.900], "site_lon": [-85.986],
+    })
+    lakes = pd.DataFrame({
+        "lagoslakeid": [1, 2],
+        "lake_name": ["Glen Lake", "Tiny Pond"],
+        "lake_lat_decdeg": [44.878, 44.897],
+        "lake_lon_decdeg": [-85.962, -85.986],
+        "lake_waterarea_ha": [2546.6, 1.08],
+    })
+    m = wqp.map_sites_to_lakes(stations, lakes)
+    assert len(m) == 1
+    assert m.iloc[0]["lagoslakeid"] == 1  # the big lake, not the pond
+
+
+def test_lakes_below_the_landsat_minimum_area_are_never_mapped():
+    """LAGOS-US LANDSAT covers lakes over 4 ha; a smaller lake cannot be predicted."""
+    stations = pd.DataFrame({
+        "site_id": ["ON_POND"], "site_name": ["pond"],
+        "site_lat": [44.9000], "site_lon": [-85.9860],
+    })
+    lakes = pd.DataFrame({
+        "lagoslakeid": [9], "lake_name": ["Sub-4ha Pond"],
+        "lake_lat_decdeg": [44.9001], "lake_lon_decdeg": [-85.9861],
+        "lake_waterarea_ha": [2.79],
+    })
+    assert wqp.map_sites_to_lakes(stations, lakes).empty
+
+
+def test_candidate_table_excludes_lakes_outside_the_target_region():
+    """A lake with field coverage but no region metadata cannot be a target."""
+    matchups = pd.DataFrame({
+        "lagoslakeid": [1] * 6, "year": list(range(2000, 2006)), "month": [7] * 6,
+        config.TARGET: np.linspace(3, 5, 6), "Pixelcount": [800] * 6,
+    })
+    lakes = pd.DataFrame({
+        "lagoslakeid": [1], "lake_name": ["Glen"], "lake_county": ["Leelanau"],
+        "lake_lat_decdeg": [44.8], "lake_lon_decdeg": [-85.9],
+        "lake_waterarea_ha": [2546.0], "lake_meanwidth_m": [500.0],
+    })
+    coverage = pd.DataFrame({
+        "field_july_years": [20, 40], "field_july_n": [40, 90],
+        "field_year_first": [1990, 1984], "field_year_last": [2020, 2024],
+        "field_secchi_mean": [6.0, 3.8], "field_all_years": [25, 41],
+    }, index=pd.Index([1, 999], name="lagoslakeid"))  # 999 is out of region
+
+    table = selection.candidate_table(matchups, lakes, coverage)
+    assert list(table["lagoslakeid"]) == [1]
 
 
 def test_lake_field_coverage_counts_distinct_july_years():
