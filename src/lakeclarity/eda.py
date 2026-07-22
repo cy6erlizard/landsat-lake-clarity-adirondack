@@ -56,8 +56,11 @@ def variance_decomposition(
     group means of small samples carry their own sampling variance and the naive
     version inflates the between-lake term for lakes with few observations.
     """
-    counts = df.groupby(group_col)[value_col].transform("size")
-    work = df[counts >= min_obs_per_group]
+    # Non-finite values (e.g. log10 of a non-positive Secchi) would poison every
+    # sum below and drive the ICC to nan, so they are dropped before counting.
+    finite = df[np.isfinite(df[value_col])]
+    counts = finite.groupby(group_col)[value_col].transform("size")
+    work = finite[counts >= min_obs_per_group]
 
     groups = work.groupby(group_col)[value_col]
     n_i = groups.size().to_numpy(dtype=float)

@@ -118,7 +118,11 @@ def add_time_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_log_target(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df[config.LOG_TARGET] = np.log10(df[config.TARGET])
+    # A Secchi reading of zero or less is non-physical (transparency is positive)
+    # and log10 would return -inf, which silently poisons any downstream mean or
+    # variance. Map those to NaN so they drop cleanly instead.
+    secchi = df[config.TARGET]
+    df[config.LOG_TARGET] = np.log10(secchi.where(secchi > 0))
     return df
 
 
