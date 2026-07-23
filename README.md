@@ -10,17 +10,13 @@ Glen Lake and Higgins Lake) because it pairs the same CDOM-influenced optical
 regime as the New Hampshire reference lakes with decades of volunteer field
 Secchi from the Michigan Cooperative Lakes Monitoring Program (since 1974).
 
-The pipeline runs in Google Colab, one notebook per phase. Each notebook has an
-Open in Colab badge; run them in order 01 through 07.
+The pipeline runs in Google Colab as a single notebook so every phase shares one
+runtime and one Drive mount, with no cross-session file handoff to break. The
+deliverable is assembled in a second notebook. Each has an Open in Colab badge.
 
-| Notebook | Phase |
+| Notebook | Covers |
 | --- | --- |
-| [01 audit](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/01_audit.ipynb) | Land EDI data on Drive, audit it |
-| [02 select lakes](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/02_select_lakes.ipynb) | Choose target lakes, measure the variance ceiling |
-| [03 features](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/03_features.ipynb) | Build training set, interrogate features |
-| [04 train](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/04_train.ipynb) | Train the regional model, attack it |
-| [05 predict](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/05_predict.ipynb) | Predict 1984-present, reconcile Collection 1 and 2 |
-| [06 validate](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/06_validate.ipynb) | Validate against Water Quality Portal field data |
+| [00 pipeline](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/00_pipeline.ipynb) | Phases 1 to 6: audit, lake selection and the variance ceiling, features, the regional model, 1984-present prediction with Collection 1/2 reconciliation, and validation. Run top to bottom (set `EE_PROJECT` first for Phase 5). |
 | [07 deliver](https://colab.research.google.com/github/cy6erlizard/landsat-lake-clarity/blob/main/notebooks/07_deliver.ipynb) | Assemble the deliverable CSV and report |
 
 This replicates the method of Piper, Glines & Rose (2024, *Ecology*), who built a
@@ -45,12 +41,13 @@ a regional model that closes some of the gap.
 
 ## Status
 
-All seven phases implemented and unit-tested locally (94 tests). The notebooks
-run the pipeline end to end in Colab against the full dataset, which is the step
-that produces the real figures and the deliverable. Phase 1 (audit) has been run
-on the full data: 723,206 matchups, 666,060 with a Secchi reading over 12,735
-lakes. Phase 2 selects the target lakes by field July-year coverage from the
-Water Quality Portal, not by coincident matchups.
+All seven phases implemented and unit-tested locally (100 tests). Phases 1 to 6
+run end to end in a single Colab notebook against the full dataset, which is the
+step that produces the real figures. Phase 1 (audit) ran on the full data:
+723,206 matchups, 666,060 with a Secchi reading over 12,735 lakes. Phase 2
+selects the target lakes by field July-year coverage from the Water Quality
+Portal (Glen Lake and Arbutus Lake), not by coincident matchups, and measures the
+ICC as a national to region ladder: 0.756 across the US, 0.475 inside the region.
 
 | Phase | What | State |
 | --- | --- | --- |
@@ -65,8 +62,9 @@ Water Quality Portal, not by coincident matchups.
 
 "code + tests" means the logic is written and covered by unit tests on synthetic
 and fixture data. "notebook" means the Colab driver that runs it on the full
-dataset exists. Running the notebooks in Colab is what populates
-`reports/figures/` and writes the deliverable.
+dataset exists. Running the pipeline in Colab writes every figure and table to
+`reports/` under the Drive data root, so each phase's output is available to the
+next; the report-critical figures are copied into the repo at Phase 7.
 
 ## Three things the published data description gets wrong
 
