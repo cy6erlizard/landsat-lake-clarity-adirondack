@@ -68,6 +68,23 @@ def test_pick_stable_reference_lake_prefers_clear_and_steady():
     assert explore.pick_stable_reference_lake(df) == 0  # clear and steady wins
 
 
+def test_pick_stable_reference_lake_adapts_to_a_sparse_region():
+    """The sparse matchup record rarely gives any lake 40 passes or 200 pixels, so
+    the picker relaxes to the best-rounded lake rather than refusing outright."""
+    rng = np.random.default_rng(2)
+    rows = []
+    # A long, well sampled, large, steady lake, and a short noisy small one. Neither
+    # meets the old fixed bar (n >= 40, px >= 200), but lake 7 is the clear choice.
+    for year in range(1990, 2016):  # 26 years
+        rows.append({"lagoslakeid": 7, "year": year, "Pixelcount": 150,
+                     config.TARGET: rng.normal(5.0, 0.15)})
+    for year in range(2010, 2014):  # 4 years
+        rows.append({"lagoslakeid": 9, "year": year, "Pixelcount": 30,
+                     config.TARGET: rng.normal(2.0, 1.5)})
+    df = pd.DataFrame(rows)
+    assert explore.pick_stable_reference_lake(df) == 7
+
+
 def _region(sample):
     r = features.add_time_columns(sample[sample[config.TARGET].notna()])
     r = features.add_log_target(r)

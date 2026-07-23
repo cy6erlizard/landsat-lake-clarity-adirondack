@@ -48,10 +48,17 @@ def mutual_information(X: pd.DataFrame, y: pd.Series, seed: int = config.RANDOM_
     return pd.Series(mi, index=X.columns).sort_values(ascending=False)
 
 
-def pick_stable_reference_lake(region: pd.DataFrame, min_years: int = 25) -> int:
+def pick_stable_reference_lake(region: pd.DataFrame, min_years: int = 15) -> int:
     """A large, clear lake with a long record and little Secchi movement.
 
-    Whatever drift this lake's reflectance shows over forty years is not the lake.
+    Whatever drift this lake's reflectance shows over the decades is the sensors,
+    not the lake. The matchup record is sparse per lake (a clean satellite pass
+    within a few days of a field reading is rare), so a fixed sample-size bar of
+    the kind the national data would clear can leave every lake in a small region
+    ineligible. Instead this clears a minimal record floor, relaxing it once if the
+    region is thin, and then ranks the survivors and returns the best rounded one:
+    long, well sampled, large, clear, and steady. It still refuses if nothing
+    clears even the relaxed floor, rather than return a meaningless reference.
     """
     g = region.groupby("lagoslakeid").agg(
         n=("Pixelcount", "size"),
@@ -60,12 +67,22 @@ def pick_stable_reference_lake(region: pd.DataFrame, min_years: int = 25) -> int
         secchi_mean=(config.TARGET, "mean"),
         secchi_sd=(config.TARGET, "std"),
     )
-    g = g[(g["yrs"] >= min_years) & (g["px"] >= 200) & (g["n"] >= 40)]
-    if g.empty:
+    for min_yrs, min_n in ((min_years, 20), (max(min_years // 2, 8), 10)):
+        eligible = g[(g["yrs"] >= min_yrs) & (g["n"] >= min_n)]
+        if not eligible.empty:
+            break
+    else:
         raise ValueError("no lake is long and large enough to serve as a drift reference")
-    # clear, and as steady as the region offers
-    g["score"] = g["secchi_mean"] / g["secchi_sd"].clip(lower=0.05)
-    return int(g["score"].idxmax())
+
+    e = eligible.copy()
+    # Steadiness is the point (a lake that has not changed), but the reference must
+    # also be long, well sampled, and large enough for stable pixel medians. Rank
+    # each ingredient so none dominates the choice by its raw scale.
+    e["stability"] = e["secchi_mean"] / e["secchi_sd"].clip(lower=0.05)
+    e["score"] = (
+        e["yrs"].rank() + e["n"].rank() + e["px"].rank() + e["stability"].rank()
+    )
+    return int(e["score"].idxmax())
 
 
 # --------------------------------------------------------------------------
